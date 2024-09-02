@@ -51,6 +51,42 @@
 
 # COMMAND ----------
 
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lower, regexp_replace
+
+# Assuming spark is your SparkSession object
+spark = SparkSession.builder.appName("ETL").getOrCreate()
+
+# Step 1: Read the input file into a DataFrame
+# Replace 'inputFile' with the path to your input file
+df = spark.read.csv('inputFile', header=True, inferSchema=True)
+
+# Step 2: Normalize the Data
+# Create new columns for comparison
+df_normalized = df.withColumn('first_name_normalized', lower(col('first_name'))) \
+                  .withColumn('middle_name_normalized', lower(col('middle_name'))) \
+                  .withColumn('last_name_normalized', lower(col('last_name'))) \
+                  .withColumn('ssn_normalized', regexp_replace(col('ssn'), '-', ''))
+
+# Step 3: Remove Duplicates
+# Drop duplicates based on the normalized columns
+df_deduplicated = df_normalized.dropDuplicates(
+    ['first_name_normalized', 'middle_name_normalized', 'last_name_normalized', 'birth_date', 'ssn_normalized']
+)
+
+# Step 4: Write the result as a Parquet file
+# Replace 'destFile' with the path to your output directory
+df_deduplicated.drop('first_name_normalized', 'middle_name_normalized', 'last_name_normalized', 'ssn_normalized') \
+               .write.parquet('destFile', mode='overwrite')
+
+# Step 5: Ensure the output contains 8 part files
+# This can be done by coalescing to 8 partitions before writing
+df_deduplicated.coalesce(8) \
+               .drop('first_name_normalized', 'middle_name_normalized', 'last_name_normalized', 'ssn_normalized') \
+               .write.parquet('destFile', mode='overwrite')
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC
 # MAGIC ##![Spark Logo Tiny](https://files.training.databricks.com/images/105/logo_spark_tiny.png) Hints
